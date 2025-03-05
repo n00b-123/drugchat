@@ -1,12 +1,10 @@
 import os
 import pickle
 import time
-from PIL import Image
 
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, LlamaTokenizer
 from transformers import StoppingCriteria, StoppingCriteriaList
-from torchvision import transforms
 
 import dataclasses
 from enum import auto, Enum
@@ -29,7 +27,6 @@ class Conversation:
     roles: List[str]
     messages: List[List[str]]
     offset: int
-    # system_img: List[Image.Image] = []
     sep_style: SeparatorStyle = SeparatorStyle.SINGLE
     sep: str = "###"
     sep2: str = None
@@ -73,7 +70,6 @@ class Conversation:
     def copy(self):
         return Conversation(
             system=self.system,
-            # system_img=self.system_img,
             roles=self.roles,
             messages=[[x, y] for x, y in self.messages],
             offset=self.offset,
@@ -85,7 +81,6 @@ class Conversation:
     def dict(self):
         return {
             "system": self.system,
-            # "system_img": self.system_img,
             "roles": self.roles,
             "messages": self.messages,
             "offset": self.offset,
@@ -119,7 +114,6 @@ CONV_VISION = Conversation(
 )
 
 
-
 class Chat:
     def __init__(self, model, vis_processor=None, device='cuda:0'):
         self.device = device
@@ -128,15 +122,6 @@ class Chat:
         stop_words_ids = [torch.tensor([835]).to(self.device),
                           torch.tensor([2277, 29937]).to(self.device)]  # '###' can be encoded in two different ways.
         self.stopping_criteria = StoppingCriteriaList([StoppingCriteriaSub(stops=stop_words_ids)])
-
-        normalize = transforms.Normalize(
-            mean=[0.485, 0.456, 0.406],
-            std=[0.229, 0.224, 0.225])
-        self.transforms = transforms.Compose([
-            transforms.CenterCrop(224), 
-            transforms.ToTensor(),
-            normalize,
-        ])
 
     def ask(self, text, conv):
         if len(conv.messages) > 0 and conv.messages[-1][0] == conv.roles[0] \
@@ -207,35 +192,26 @@ class Chat:
                         g = res["graph"]
                         graph0 = Data(x=torch.asarray(g['node_feat']), edge_index=torch.asarray(g['edge_index']), edge_attr=torch.asarray(g['edge_feat']))
                         inputs["graph"] = Batch.from_data_list([graph0]).to(self.device)
-                    if "img_save_path" in res:
-                        img_save_path = res["img_save_path"]
-                        img = Image.open(img_save_path).convert("RGB")
-                        inputs["image"] = self.transforms(img).unsqueeze(0).to(self.device)
                     break
-        if "image" not in inputs and "graph" not in inputs:
+        if "graph" not in inputs:
             return  # issues in creating inputs
 
         image_emb, _ = self.model.encode_img_infer(inputs, device=self.device, autocast=autocast, autocast_proj=autocast_proj)
         img_list.append(image_emb)
         conv.append_message(conv.roles[0], "<compound><compoundHere></compound>")
         msg = "Received."
-        # self.conv.append_message(self.conv.roles[1], msg)
         return msg
 
     def get_context_emb(self, conv, img_list):
         prompt = conv.get_prompt()
-        # print(prompt)
         prompt_segs = prompt.split('<compoundHere>')
         assert len(prompt_segs) == len(img_list) + 1, "Unmatched numbers of image placeholders and images."
         seg_tokens = [
             self.model.llama_tokenizer(
                 seg, return_tensors="pt", add_special_tokens=i == 0).to(self.device).input_ids
-            # only add bos to the first seg
             for i, seg in enumerate(prompt_segs)
         ]
         seg_embs = [self.model.llama_model.model.embed_tokens(seg_t) for seg_t in seg_tokens]
         mixed_embs = [emb for pair in zip(seg_embs[:-1], img_list) for emb in pair] + [seg_embs[-1]]
         mixed_embs = torch.cat(mixed_embs, dim=1)
         return mixed_embs
-
-

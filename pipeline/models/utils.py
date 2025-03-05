@@ -1,5 +1,4 @@
 import torch.nn as nn
-from timm.models.layers import drop_path
 
 
 class Mlp(nn.Module):

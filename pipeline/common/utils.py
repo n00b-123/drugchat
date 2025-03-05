@@ -25,11 +25,6 @@ from iopath.common.download import download
 from iopath.common.file_io import file_lock, g_pathmgr
 from pipeline.common.registry import registry
 from torch.utils.model_zoo import tqdm
-from torchvision.datasets.utils import (
-    check_integrity,
-    download_file_from_google_drive,
-    extract_archive,
-)
 
 
 def now():
@@ -54,11 +49,6 @@ def get_abs_path(rel_path):
 def load_json(filename):
     with open(filename, "r") as f:
         return json.load(f)
-
-
-# The following are adapted from torchvision and vissl
-# torchvision: https://github.com/pytorch/vision
-# vissl: https://github.com/facebookresearch/vissl/blob/main/vissl/utils/download.py
 
 
 def makedir(dir_path):
@@ -368,57 +358,48 @@ def load_file(filename, mmap_mode=None, verbose=True, allow_pickle=False):
             data = pd.read_csv(fopen)
     else:
         raise Exception(f"Reading from {file_ext} is not supported yet")
+
+    if verbose:
+        logging.info(f"Loaded data from file: {filename}")
+
     return data
 
 
-def abspath(resource_path: str):
-    """
-    Make a path absolute, but take into account prefixes like
-    "http://" or "manifold://"
-    """
-    regex = re.compile(r"^\w+://")
-    if regex.match(resource_path) is None:
-        return os.path.abspath(resource_path)
+def check_integrity(fpath, md5):
+    """Checks the integrity of the file"""
+    from hashlib import md5 as hashlib_md5
+
+    if md5 is None:
+        return True
+
+    # We use the `hashlib` module here for better compatibility
+    # between different versions of python.
+    md5_hash = hashlib_md5()
+    with g_pathmgr.open(fpath, "rb") as fopen:
+        for chunk in iter(lambda: fopen.read(4096), b""):
+            md5_hash.update(chunk)
+    return md5_hash.hexdigest() == md5
+
+
+def extract_archive(archive_path, extract_path, remove_finished=True):
+    """Extract archive file"""
+    if archive_path.endswith(".tar"):
+        shutil.unpack_archive(archive_path, extract_path, "tar")
+    elif archive_path.endswith(".tar.gz") or archive_path.endswith(".tgz"):
+        shutil.unpack_archive(archive_path, extract_path, "tar")
+    elif archive_path.endswith(".zip"):
+        shutil.unpack_archive(archive_path, extract_path, "zip")
     else:
-        return resource_path
+        raise ValueError(f"Unsupported archive file type: {archive_path}")
+
+    if remove_finished:
+        os.remove(archive_path)
 
 
-def makedir(dir_path):
-    """
-    Create the directory if it does not exist.
-    """
-    is_success = False
-    try:
-        if not g_pathmgr.exists(dir_path):
-            g_pathmgr.mkdirs(dir_path)
-        is_success = True
-    except BaseException:
-        logging.info(f"Error creating directory: {dir_path}")
-    return is_success
+def download_file_from_google_drive(
+    file_id: str, root: str, filename: str, md5: Optional[str] = None
+):
+    """Download file from google drive using its file id"""
+    url = f"https://drive.google.com/uc?id={file_id}"
+    download_url(url, root, filename, md5)
 
-
-def is_url(input_url):
-    """
-    Check if an input string is a url. look for http(s):// and ignoring the case
-    """
-    is_url = re.match(r"^(?:http)s?://", input_url, re.IGNORECASE) is not None
-    return is_url
-
-
-def cleanup_dir(dir):
-    """
-    Utility for deleting a directory. Useful for cleaning the storage space
-    that contains various training artifacts like checkpoints, data etc.
-    """
-    if os.path.exists(dir):
-        logging.info(f"Deleting directory: {dir}")
-        shutil.rmtree(dir)
-    logging.info(f"Deleted contents of directory: {dir}")
-
-
-def get_file_size(filename):
-    """
-    Given a file, get the size of file in MB
-    """
-    size_in_mb = os.path.getsize(filename) / float(1024**2)
-    return size_in_mb

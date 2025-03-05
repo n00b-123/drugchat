@@ -16,7 +16,6 @@ import torch
 import torch.distributed as dist
 import webdataset as wds
 from pipeline.common.dist_utils import (
-    download_cached_file,
     get_rank,
     get_world_size,
     is_main_process,
@@ -652,12 +651,12 @@ class RunnerBase:
         """
         Resume from a checkpoint.
         """
-        if is_url(url_or_filename):
-            cached_file = download_cached_file(
-                url_or_filename, check_hash=False, progress=True
-            )
-            checkpoint = torch.load(cached_file, map_location=self.device)
-        elif os.path.isfile(url_or_filename):
+        # if is_url(url_or_filename):
+        #     cached_file = download_cached_file(
+        #         url_or_filename, check_hash=False, progress=True
+        #     )
+        #     checkpoint = torch.load(cached_file, map_location=self.device)
+        if os.path.isfile(url_or_filename):
             checkpoint = torch.load(url_or_filename, map_location=self.device)
         else:
             raise RuntimeError("checkpoint url or path is invalid")

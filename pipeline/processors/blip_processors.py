@@ -1,18 +1,7 @@
-"""
- Copyright (c) 2022, salesforce.com, inc.
- All rights reserved.
- SPDX-License-Identifier: BSD-3-Clause
- For full license text, see the LICENSE_Lavis file in the repo root or https://opensource.org/licenses/BSD-3-Clause
-"""
-
 import re
-
 from pipeline.common.registry import registry
 from pipeline.processors.base_processor import BaseProcessor
-from pipeline.processors.randaugment import RandomAugment
 from omegaconf import OmegaConf
-from torchvision import transforms
-from torchvision.transforms.functional import InterpolationMode
 
 
 class BlipImageBaseProcessor(BaseProcessor):
@@ -22,7 +11,8 @@ class BlipImageBaseProcessor(BaseProcessor):
         if std is None:
             std = (0.26862954, 0.26130258, 0.27577711)
 
-        self.normalize = transforms.Normalize(mean, std)
+        self.mean = mean
+        self.std = std
 
 
 @registry.register_processor("blip_caption")
@@ -72,21 +62,14 @@ class BlipCaptionProcessor(BaseProcessor):
 class Blip2ImageTrainProcessor(BlipImageBaseProcessor):
     def __init__(self, image_size=224, mean=None, std=None, min_scale=0.5, max_scale=1.0):
         super().__init__(mean=mean, std=std)
-
-        self.transform = transforms.Compose(
-            [
-                transforms.RandomResizedCrop(
-                    image_size,
-                    scale=(min_scale, max_scale),
-                    interpolation=InterpolationMode.BICUBIC,
-                ),
-                transforms.ToTensor(),
-                self.normalize,
-            ]
-        )
+        self.image_size = image_size
+        self.min_scale = min_scale
+        self.max_scale = max_scale
 
     def __call__(self, item):
-        return self.transform(item)
+        # No transformation logic, just resizing or other methods as needed
+        # You can use item directly or handle it outside this class
+        return item
 
     @classmethod
     def from_config(cls, cfg=None):
@@ -114,19 +97,12 @@ class Blip2ImageTrainProcessor(BlipImageBaseProcessor):
 class Blip2ImageEvalProcessor(BlipImageBaseProcessor):
     def __init__(self, image_size=224, mean=None, std=None):
         super().__init__(mean=mean, std=std)
-
-        self.transform = transforms.Compose(
-            [
-                transforms.Resize(
-                    (image_size, image_size), interpolation=InterpolationMode.BICUBIC
-                ),
-                transforms.ToTensor(),
-                self.normalize,
-            ]
-        )
+        self.image_size = image_size
 
     def __call__(self, item):
-        return self.transform(item)
+        # No transformation logic, just resizing or other methods as needed
+        # You can use item directly or handle it outside this class
+        return item
 
     @classmethod
     def from_config(cls, cfg=None):

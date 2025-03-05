@@ -15,7 +15,6 @@ import contextlib
 from pipeline.models.base_model import BaseModel
 from transformers import StoppingCriteria, StoppingCriteriaList
 
-from pipeline.models.image_mol import ImageMol
 from peft import LoraConfig, get_peft_model, LoraModel
 import pickle, os
 
@@ -78,10 +77,10 @@ class DrugChat(BaseModel):
         if "gnn" in self.encoder_names:
             self.use_graph_agg = use_graph_agg
             self.create_gnn(freeze_gnn)
-        if "image_mol" in self.encoder_names:
-            self.create_image_mol(freeze_image_mol)
+        # if "image_mol" in self.encoder_names:
+        #     self.create_image_mol(freeze_image_mol)
 
-        self.ln_vision = nn.Identity()
+        # self.ln_vision = nn.Identity()
 
         print('Loading LLAMA')
         self.llama_tokenizer = LlamaTokenizer.from_pretrained(llama_model, use_fast=False)
@@ -186,75 +185,75 @@ class DrugChat(BaseModel):
         
         print('Loaded GNN')
 
-    def create_image_mol(self, freeze):
-        model_path = "ckpt/ImageMol.pth.tar"
-        assert os.path.exists(model_path), f"Cannot find checkpoint: {model_path}"
-        model = ImageMol()
-        model.load_from_pretrained(url_or_filename=model_path)
-        self.image_mol = model
-        self.encoder_out_dim = model.emb_dim
+    # def create_image_mol(self, freeze):
+    #     model_path = "ckpt/ImageMol.pth.tar"
+    #     assert os.path.exists(model_path), f"Cannot find checkpoint: {model_path}"
+    #     model = ImageMol()
+    #     model.load_from_pretrained(url_or_filename=model_path)
+    #     self.image_mol = model
+    #     self.encoder_out_dim = model.emb_dim
 
-        if freeze:
-            for name, param in self.image_mol.named_parameters():
-                param.requires_grad = False
-            self.image_mol = self.image_mol.eval()
-            self.image_mol.train = disabled_train
-            print("freezed image_mol")
-        print('Loaded image_mol')
+    #     if freeze:
+    #         for name, param in self.image_mol.named_parameters():
+    #             param.requires_grad = False
+    #         self.image_mol = self.image_mol.eval()
+    #         self.image_mol.train = disabled_train
+    #         print("freezed image_mol")
+    #     print('Loaded image_mol')
 
     def vit_to_cpu(self):
-        self.ln_vision.to("cpu")
-        self.ln_vision.float()
+        # self.ln_vision.to("cpu")
+        # self.ln_vision.float()
         if "gnn" in self.encoder_names:
             self.gnn.to("cpu")
             self.gnn.float()
-        if "image_mol" in self.encoder_names:
-            self.image_mol.to("cpu")
-            self.image_mol.float()
+        # if "image_mol" in self.encoder_names:
+        #     self.image_mol.to("cpu")
+        #     self.image_mol.float()
 
-    def encode_img(self, inputs, device, do_proj=True):
-        """
-        Args:
-            inputs (dict)
-        """
-        if "gnn" in self.encoder_names:
-            graph = inputs['graph']
-            device = graph.x.device
-            if self.low_resource:
-                self.vit_to_cpu()
-                graph = graph.to("cpu")
+    # def encode_img(self, inputs, device, do_proj=True):
+    #     """
+    #     Args:
+    #         inputs (dict)
+    #     """
+    #     if "gnn" in self.encoder_names:
+    #         graph = inputs['graph']
+    #         device = graph.x.device
+    #         if self.low_resource:
+    #             self.vit_to_cpu()
+    #             graph = graph.to("cpu")
 
-            graph_feat = self.gnn(graph).to(device)
-            if not self.use_graph_agg:
-                graph_feat = self.pad_node(graph, graph_feat)
-            feat = graph_feat
-            inputs["feat"] = feat
-            inputs["graph_feat"] = feat
-        if "image_mol" in self.encoder_names:
-            image = inputs['image']
-            device = image.device
-            if self.low_resource:
-                self.vit_to_cpu()
-                image = image.to("cpu")
-            feat = self.image_mol(image).to(device)
-            feat = feat.unsqueeze(1)
-            inputs["feat"] = feat
-            inputs["image_feat"] = feat
+    #         graph_feat = self.gnn(graph).to(device)
+    #         if not self.use_graph_agg:
+    #             graph_feat = self.pad_node(graph, graph_feat)
+    #         feat = graph_feat
+    #         inputs["feat"] = feat
+    #         inputs["graph_feat"] = feat
+        # if "image_mol" in self.encoder_names:
+        #     image = inputs['image']
+        #     device = image.device
+        #     if self.low_resource:
+        #         self.vit_to_cpu()
+        #         image = image.to("cpu")
+        #     feat = self.image_mol(image).to(device)
+        #     feat = feat.unsqueeze(1)
+        #     inputs["feat"] = feat
+        #     inputs["image_feat"] = feat
         
-        if do_proj:
-            inputs_llama, atts_llama = self.proj_feat(inputs, device)
-            return inputs_llama, atts_llama
-        return inputs
+        # if do_proj:
+        #     inputs_llama, atts_llama = self.proj_feat(inputs, device)
+        #     return inputs_llama, atts_llama
+        # return inputs
 
-    def encode_img_infer(self, inputs, device, autocast=False, autocast_proj=False):
-        """
-        Need this function to fix the inference data casting issues
-        """
-        with torch.cuda.amp.autocast(autocast):
-            features = self.encode_img(inputs, device, do_proj=False)
-        with torch.cuda.amp.autocast(autocast_proj):
-            out = self.proj_feat(features, device)
-        return out
+    # def encode_img_infer(self, inputs, device, autocast=False, autocast_proj=False):
+    #     """
+    #     Need this function to fix the inference data casting issues
+    #     """
+    #     with torch.cuda.amp.autocast(autocast):
+    #         features = self.encode_img(inputs, device, do_proj=False)
+    #     with torch.cuda.amp.autocast(autocast_proj):
+    #         out = self.proj_feat(features, device)
+    #     return out
 
     def proj_feat(self, features, device):
         """
@@ -271,7 +270,7 @@ class DrugChat(BaseModel):
             atts_img = torch.ones(img_embeds.size()[:-1], dtype=torch.long).to(device)
             return img_embeds, atts_img
 
-        embeds = self.ln_vision(features["feat"]).to(device)
+        # embeds = self.ln_vision(features["feat"]).to(device)
 
         inputs_llama = self.llama_proj(embeds)
         atts_llama = torch.ones(inputs_llama.size()[:-1], dtype=torch.long).to(device)
@@ -310,15 +309,15 @@ class DrugChat(BaseModel):
     def forward(self, samples):
         if "gnn" in self.encoder_names:
             inputs = samples["graph"]
-            device = inputs.x.device
-        if "image_mol" in self.encoder_names:
-            inputs = samples["image"]
-            device = inputs.device
+        #     device = inputs.x.device
+        # if "image_mol" in self.encoder_names:
+        #     inputs = samples["image"]
+        #     device = inputs.device
         if "feat" in self.encoder_names:
             # no encoder
             device = list(v for v in samples.values() if isinstance(v, torch.Tensor))[0].device
 
-        img_embeds, atts_img = self.encode_img(samples, device)
+        # img_embeds, atts_img = self.encode_img(samples, device)
 
         assert 'question' in samples
         if 'question' in samples:

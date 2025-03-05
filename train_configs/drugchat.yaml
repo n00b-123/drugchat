@@ -11,7 +11,6 @@ model:
   ckpt: ""
   encoder_names:
   - gnn
-  - image_mol
   prompt_tuning: 0
   feat_dims:
     graph_feat: 300
@@ -22,15 +21,10 @@ datasets:
   chembl:  # put any name here for your dataset
     label: "ChEMBL data"
     type: default
-    vis_processor:
-      train:
-        name: "blip2_image_train"
-        image_size: 224
     text_processor:
       train:
         name: "blip_caption"
     data_type:
-    - image
     - graph
     build_info:
       storage: data_public/ChEMBL/train
@@ -40,15 +34,10 @@ datasets:
   drugbank:
     label: "DrugBank data"
     type: default
-    vis_processor:
-      train:
-        name: "blip2_image_train"
-        image_size: 224
     text_processor:
       train:
         name: "blip_caption"
     data_type:
-    - image
     - graph
     build_info:
       storage: data_public/DrugBank/train

@@ -91,6 +91,7 @@ def load_preprocess(config):
     else:
         vis_train_cfg = None
         vis_eval_cfg = None
+        print("In Init, vis processor is None!")
 
     vis_processors["train"] = _build_proc_from_cfg(vis_train_cfg)
     vis_processors["eval"] = _build_proc_from_cfg(vis_eval_cfg)

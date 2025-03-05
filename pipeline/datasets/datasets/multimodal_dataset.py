@@ -2,11 +2,8 @@ import os
 import json
 import pickle
 import torch
-
-from PIL import Image
 from torch.utils.data.dataloader import default_collate
 from torch.utils.data import Dataset, ConcatDataset
-from torchvision import transforms
 from torch_geometric.data import Data, Batch
 
 
@@ -19,26 +16,11 @@ class MultimodalDataset(Dataset):
         print(f"Using {jsonpath=}")
         with open(jsonpath, "rt") as f:
             meta = json.load(f)
-        normalize = transforms.Normalize(
-            mean=[0.485, 0.456, 0.406],
-            std=[0.229, 0.224, 0.225])
-        if is_train:
-            self.transforms = transforms.Compose([
-                transforms.RandomRotation((0, 180), fill=255),
-                transforms.RandomResizedCrop(image_size, (0.5, 1)),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                normalize,
-            ])
-        else:
-            self.transforms = transforms.Compose([
-                transforms.CenterCrop(image_size), 
-                transforms.ToTensor(),
-                normalize,
-            ])
+
         if use_graph:
             with open(os.path.join(datapath, "graph_smi.pkl"), "rb") as f:
                 graphs = pickle.load(f)
+        
         self.images = {}
         self.data = []
         self.graphs = {}
@@ -46,9 +28,8 @@ class MultimodalDataset(Dataset):
             if use_image:
                 img_file = 'img_{}.png'.format(idx)
                 image_path = os.path.join(datapath, img_file)
-                image = Image.open(image_path).convert("RGB")
-                # img = self.transforms(image)
-                self.images[idx] = image
+                # Removed image processing using torchvision
+                self.images[idx] = image_path  # Store the image path
             smi, qa = rec
             if use_graph:
                 g = graphs[smi]["graph"]
@@ -64,9 +45,8 @@ class MultimodalDataset(Dataset):
         idx, qa_pair = self.data[index]
         out = {"question": qa_pair[0], "text_input": str(qa_pair[1])}
         if self.use_image:
-            img = self.images[idx]
-            img = self.transforms(img)
-            out.update({"img": img})
+            img_path = self.images[idx]  # Retrieve the image path instead of the image itself
+            out.update({"img": img_path})  # You can later process it as needed
         if self.use_graph:
             out.update({"graph": self.graphs[idx]})
         return out
@@ -77,8 +57,8 @@ class MultimodalDataset(Dataset):
         aa = [x["text_input"] for x in samples]
         out = {"question": qq, "text_input": aa}
         if "img" in samples[0]:
-            imgs = default_collate([x["img"] for x in samples])
-            out.update({"image": imgs})
+            img_paths = [x["img"] for x in samples]  # Retrieve image paths
+            out.update({"image": img_paths})  # Use image paths for now
         if "graph" in samples[0]:
             g = Batch.from_data_list([x["graph"] for x in samples])
             out.update({"graph": g})
